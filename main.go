@@ -213,6 +213,11 @@ func main() {
 			for i, value := range detailSemuaKecamatan {
 				value["id_kec"] = i + 1
 			}
+			sort.Slice(detailSemuaKecamatan, func(i, j int) bool {
+				total1 := detailSemuaKecamatan[i]["total"].(float64)
+				total2 := detailSemuaKecamatan[j]["total"].(float64)
+				return total2 < total1
+			})
 			valueData["total_kecamatan"] = totalKecamatan
 			valueData["total_penduduk"] = totalPenduduk
 			valueData["list_kecamatan"] = detailSemuaKecamatan
