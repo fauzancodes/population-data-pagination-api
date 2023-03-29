@@ -6,6 +6,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -24,52 +25,8 @@ func main() {
 	app := fiber.New()
 
 	app.Get("/list_kabupaten", func(c *fiber.Ctx) error {
-		data, err := getData()
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		uniqueNames := make(map[string]map[string]interface{})
-		for _, elem := range data.Data {
-			id, ok := elem[0].(float64)
-			if !ok {
-				log.Fatal("Invalid data format")
-			}
-			name, ok := elem[3].(string)
-			if !ok {
-				log.Fatal("Invalid data format")
-			}
-			if _, ok := uniqueNames[name]; !ok {
-				uniqueNames[name] = make(map[string]interface{})
-				uniqueNames[name]["id_kab"] = id
-				uniqueNames[name]["nama"] = name
-			}
-		}
-
-		var result []map[string]interface{}
-		for _, value := range uniqueNames {
-			result = append(result, value)
-		}
-		sort.Slice(result, func(i, j int) bool {
-			id1 := result[i]["id_kab"].(float64)
-			id2 := result[j]["id_kab"].(float64)
-			return id1 < id2
-		})
-		for i, value := range result {
-			value["id_kab"] = i + 1
-		}
-
-		return c.JSON(map[string]interface{}{
-			"status": true,
-			"data":   result,
-		})
-	})
-
-	app.Get("/list_kabupaten/:page", func(c *fiber.Ctx) error {
-		page, err := strconv.Atoi(c.Params("page"))
-		if err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
+		searchPattern := c.Query("search")
+		page := c.QueryInt("page", 1)
 
 		data, err := getData()
 		if err != nil {
@@ -107,25 +64,44 @@ func main() {
 		}
 
 		var resultPage []map[string]interface{}
+		var resultSearch []map[string]interface{}
 		limit := 10
-		for i, elem := range result {
-			if i >= (page-1)*limit && i < page*limit {
-				resultPage = append(resultPage, elem)
+		var totalData int
+		var totalPage int
+		if searchPattern == "" {
+			for i, elem := range result {
+				if i >= (page-1)*limit && i < page*limit {
+					resultPage = append(resultPage, elem)
+				}
 			}
+			totalData = len(result)
+			totalPage = int(math.Ceil(float64(totalData) / float64(limit)))
+		} else {
+			re := regexp.MustCompile(strings.ToLower(searchPattern))
+			for _, elem := range result {
+				if re.MatchString(strings.ToLower(elem["nama"].(string))) {
+					resultSearch = append(resultSearch, elem)
+				}
+			}
+			for i, elem := range resultSearch {
+				if i >= (page-1)*limit && i < page*limit {
+					resultPage = append(resultPage, elem)
+				}
+			}
+			totalData = len(resultSearch)
+			totalPage = int(math.Ceil(float64(totalData) / float64(limit)))
 		}
-		totalData := len(result)
-		totalPage := int(math.Ceil(float64(totalData) / float64(limit)))
 		if page > totalPage {
 			return c.JSON(map[string]interface{}{
-				"status":       false,
-				"data":         http.StatusText(http.StatusNotFound),
+				"status": false,
+				"data":   http.StatusText(http.StatusNotFound),
 			})
 		} else if page < totalPage {
 			return c.JSON(map[string]interface{}{
 				"status":       true,
 				"data":         resultPage,
 				"total":        totalData,
-				"search":       "",
+				"search":       searchPattern,
 				"limit":        limit,
 				"current_page": page,
 				"total_page":   totalPage,
@@ -136,7 +112,7 @@ func main() {
 				"status":       true,
 				"data":         resultPage,
 				"total":        totalData,
-				"search":       "",
+				"search":       searchPattern,
 				"limit":        limit,
 				"current_page": page,
 				"total_page":   totalPage,
